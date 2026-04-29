@@ -2,6 +2,15 @@ modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "MIT"
 
+[[mods]]
+    modId = "customtab"
+    version = "${file.jarVersion}"
+    displayName = "CustomTab"
+    description = '''
+Fully customizable tab list with image support for server administrators.
+Supports hex colors, custom header/footer, and image rendering in tab header.
+'''
+
 [[dependencies.customtab]]
     modId = "neoforge"
     type = "required"
@@ -15,21 +24,6 @@ license = "MIT"
     versionRange = "[1.21.1,1.22)"
     ordering = "NONE"
     side = "BOTH"
-
-[[mods]]
-    modId = "customtab"
-    version = "${file.jarVersion}"
-    displayName = "CustomTab"
-    description = '''
-Fully customizable tab list with image support for server administrators.
-Supports hex colors, custom header/footer, and image rendering in tab header.
-'''
-    [[mods.logo]]
-        file = "customtab.png"
-
-[[contacts]]
-    homepage = "https://github.com/kingmihailp/custom-tab-with-image"
-    sources = "https://github.com/kingmihailp/custom-tab-with-image"
 
 [[mixins]]
     config = "customtab.mixins.json"
