@@ -43,6 +43,7 @@ public final class ClientTabCommand {
     private static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
             Commands.literal("ctclient")
+                .requires(src -> src.hasPermission(2))
                 .then(Commands.literal("image")
                     .then(Commands.literal("set")
                         .then(Commands.argument("path", StringArgumentType.greedyString())
