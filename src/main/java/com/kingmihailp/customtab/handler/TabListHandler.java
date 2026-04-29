@@ -1,0 +1,138 @@
+package com.kingmihailp.customtab.handler;
+
+import com.kingmihailp.customtab.CustomTabMod;
+import com.kingmihailp.customtab.config.TabConfig;
+import com.kingmihailp.customtab.util.ColorUtil;
+import com.kingmihailp.customtab.util.ImageConverter;
+import com.kingmihailp.customtab.util.PlaceholderUtil;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+
+import java.io.File;
+
+public class TabListHandler {
+
+    private MinecraftServer server;
+    private int tickCounter = 0;
+
+    // Cached image component — rebuilt only when the image path/dimensions change
+    private String  cachedImagePath  = null;
+    private int     cachedImageW     = -1;
+    private int     cachedImageH     = -1;
+    private Component cachedImage    = null;
+
+    @SubscribeEvent
+    public void onServerStarted(ServerStartedEvent event) {
+        server = event.getServer();
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        server = null;
+        cachedImage = null;
+    }
+
+    @SubscribeEvent
+    public void onServerTick(ServerTickEvent.Post event) {
+        if (server == null) return;
+        if (!TabConfig.ENABLED.get()) return;
+
+        tickCounter++;
+        int interval = TabConfig.UPDATE_INTERVAL.get();
+        if (tickCounter < interval) return;
+        tickCounter = 0;
+
+        Component header = buildHeader();
+        Component footer = buildFooter();
+
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.connection.send(new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
+        }
+    }
+
+    /** Send updated header/footer immediately when a player joins. */
+    @SubscribeEvent
+    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (server == null) return;
+        if (!TabConfig.ENABLED.get()) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        Component header = buildHeader();
+        Component footer = buildFooter();
+        player.connection.send(new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
+    }
+
+    // ------------------------------------------------------------------
+    // Internal helpers
+    // ------------------------------------------------------------------
+
+    /** Force the image cache to be rebuilt on next tick (called after /customtab reload). */
+    public void invalidateImageCache() {
+        cachedImagePath = null;
+    }
+
+    private Component buildHeader() {
+        MutableComponent header = Component.empty();
+
+        Component image = getOrBuildImage();
+        String headerRaw = TabConfig.HEADER_TEXT.get();
+
+        if (image != null && TabConfig.IMAGE_ABOVE_HEADER.get()) {
+            header.append(image);
+            if (!headerRaw.isBlank()) header.append(Component.literal("\n"));
+        }
+
+        if (!headerRaw.isBlank()) {
+            String resolved = PlaceholderUtil.apply(headerRaw, server);
+            header.append(ColorUtil.parse(resolved));
+        }
+
+        if (image != null && !TabConfig.IMAGE_ABOVE_HEADER.get()) {
+            if (!headerRaw.isBlank()) header.append(Component.literal("\n"));
+            header.append(image);
+        }
+
+        return header;
+    }
+
+    private Component buildFooter() {
+        String raw = TabConfig.FOOTER_TEXT.get();
+        if (raw == null || raw.isBlank()) return Component.empty();
+        String resolved = PlaceholderUtil.apply(raw, server);
+        return ColorUtil.parse(resolved);
+    }
+
+    private Component getOrBuildImage() {
+        if (!TabConfig.IMAGE_ENABLED.get()) return null;
+
+        String path = TabConfig.IMAGE_PATH.get();
+        int    w    = TabConfig.IMAGE_WIDTH.get();
+        int    h    = TabConfig.IMAGE_HEIGHT.get();
+
+        // Return cached version if nothing changed
+        if (path.equals(cachedImagePath) && w == cachedImageW && h == cachedImageH) {
+            return cachedImage;
+        }
+
+        File file = new File(path);
+        if (!file.isAbsolute()) file = new File(server.getServerDirectory().toFile(), path);
+
+        if (!file.exists()) {
+            CustomTabMod.LOGGER.warn("Image not found: {}", file.getAbsolutePath());
+            cachedImage = null;
+        } else {
+            cachedImage = ImageConverter.convert(file, w, h);
+        }
+
+        cachedImagePath = path;
+        cachedImageW    = w;
+        cachedImageH    = h;
+        return cachedImage;
+    }
+}

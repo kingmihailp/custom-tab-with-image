@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+.eclipse/
+.classpath
+.project
+.settings/
+
+# NeoForge run dirs
+run/
+
+# Generated sources
+src/generated/
+
+# Compiled output
+*.class
+*.jar
+
+# OS
+.DS_Store
+Thumbs.db
