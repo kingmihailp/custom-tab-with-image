@@ -7,6 +7,7 @@ import com.kingmihailp.customtab.util.ImageConverter;
 import com.kingmihailp.customtab.util.PlaceholderUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
