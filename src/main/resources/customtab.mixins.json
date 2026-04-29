@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "com.kingmihailp.customtab.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MixinPlayerTabOverlay"
+  ],
+  "minVersion": "0.8"
+}

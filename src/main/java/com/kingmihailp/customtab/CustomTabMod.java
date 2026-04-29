@@ -1,6 +1,7 @@
 package com.kingmihailp.customtab;
 
 import com.kingmihailp.customtab.command.TabCommand;
+import com.kingmihailp.customtab.config.TabClientConfig;
 import com.kingmihailp.customtab.config.TabConfig;
 import com.kingmihailp.customtab.handler.TabListHandler;
 import net.neoforged.bus.api.IEventBus;
@@ -21,6 +22,7 @@ public class CustomTabMod {
 
     public CustomTabMod(IEventBus modEventBus, ModContainer modContainer) {
         modContainer.registerConfig(ModConfig.Type.SERVER, TabConfig.SPEC, "customtab-server.toml");
+        modContainer.registerConfig(ModConfig.Type.CLIENT, TabClientConfig.SPEC, "customtab-client.toml");
 
         modEventBus.addListener(this::commonSetup);
 

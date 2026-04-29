@@ -30,3 +30,6 @@ Supports hex colors, custom header/footer, and image rendering in tab header.
 [[contacts]]
     homepage = "https://github.com/kingmihailp/custom-tab-with-image"
     sources = "https://github.com/kingmihailp/custom-tab-with-image"
+
+[[mixins]]
+    config = "customtab.mixins.json"
