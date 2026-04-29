@@ -6,9 +6,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
 
 import javax.imageio.ImageIO;
@@ -16,67 +14,61 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 
-/**
- * Manages the lifecycle of the client-side tab header image texture and renders it.
- *
- * The texture is loaded lazily and cached until the configured path changes.
- * Call {@link #invalidate()} to force a reload on the next render.
- */
 public final class ClientTabImageRenderer {
 
     private static final ResourceLocation TEXTURE_LOC =
             ResourceLocation.fromNamespaceAndPath(CustomTabMod.MODID, "tab_header_image");
 
-    private static String  loadedPath   = null;
-    private static boolean loadFailed   = false;
-    private static int     texWidth     = 0;
-    private static int     texHeight    = 0;
-    private static DynamicTexture texture = null;
+    private static String         loadedPath = null;
+    private static boolean        loadFailed = false;
+    private static int            texWidth   = 0;
+    private static int            texHeight  = 0;
+    private static boolean        registered = false;
+    private static DynamicTexture texture    = null;
 
     private ClientTabImageRenderer() {}
 
-    /** Force the texture to be reloaded on the next render call. */
     public static void invalidate() {
         releaseTexture();
-        loadedPath  = null;
-        loadFailed  = false;
+        loadedPath = null;
+        loadFailed = false;
+        registered = false;
     }
 
-    /**
-     * Called every frame while the tab list is open.
-     * Handles lazy loading, then renders the image centered at the top of the screen.
-     */
     public static void render(GuiGraphics gui, int screenWidth) {
         if (!TabClientConfig.IMAGE_ENABLED.get()) return;
 
         String path = TabClientConfig.IMAGE_PATH.get();
 
-        // Reload if path changed or texture was never loaded
         if (!path.equals(loadedPath) || (texture == null && !loadFailed)) {
             loadTexture(path);
         }
 
         if (texture == null || loadFailed) return;
 
-        int dispW  = TabClientConfig.IMAGE_DISPLAY_WIDTH.get();
-        int dispH  = TabClientConfig.IMAGE_DISPLAY_HEIGHT.get();
-        int xOff   = TabClientConfig.IMAGE_X_OFFSET.get();
-        int yOff   = TabClientConfig.IMAGE_Y_OFFSET.get();
-        float alpha = (float) TabClientConfig.IMAGE_ALPHA.get().doubleValue();
+        // Register once with the texture manager (must be on render thread — we are)
+        if (!registered) {
+            Minecraft.getInstance().getTextureManager().register(TEXTURE_LOC, texture);
+            registered = true;
+        }
+
+        int   dispW  = TabClientConfig.IMAGE_DISPLAY_WIDTH.get();
+        int   dispH  = TabClientConfig.IMAGE_DISPLAY_HEIGHT.get();
+        int   xOff   = TabClientConfig.IMAGE_X_OFFSET.get();
+        int   yOff   = TabClientConfig.IMAGE_Y_OFFSET.get();
+        float alpha  = TabClientConfig.IMAGE_ALPHA.get().floatValue();
 
         int x = screenWidth / 2 - dispW / 2 + xOff;
         int y = yOff;
 
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, alpha);
 
-        // Register texture on the texture manager if not yet registered
-        TextureManager tm = Minecraft.getInstance().getTextureManager();
-        tm.register(TEXTURE_LOC, texture);
-
-        gui.blit(TEXTURE_LOC, x, y, 0, 0, dispW, dispH, texWidth, texHeight);
+        // blit(atlas, x, y, screenW, screenH, u, v, texRegionW, texRegionH, texTotalW, texTotalH)
+        // This samples the full texture (0,0 → texWidth×texHeight) scaled to dispW×dispH on screen.
+        gui.blit(TEXTURE_LOC, x, y, dispW, dispH,
+                0.0f, 0.0f, texWidth, texHeight, texWidth, texHeight);
 
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
         RenderSystem.disableBlend();
@@ -88,6 +80,7 @@ public final class ClientTabImageRenderer {
         releaseTexture();
         loadedPath = path;
         loadFailed = false;
+        registered = false;
 
         File file = new File(path);
         if (!file.isAbsolute()) {
@@ -118,19 +111,17 @@ public final class ClientTabImageRenderer {
         texWidth  = img.getWidth();
         texHeight = img.getHeight();
 
-        // NativeImage.setPixelRGBA expects ABGR (little-endian RGBA)
+        // NativeImage.setPixelRGBA expects ABGR (0xAABBGGRR)
+        // BufferedImage.getRGB returns ARGB (0xAARRGGBB) — swap R and B
         NativeImage native_ = new NativeImage(texWidth, texHeight, false);
-
         for (int py = 0; py < texHeight; py++) {
             for (int px = 0; px < texWidth; px++) {
                 int argb = img.getRGB(px, py);
-                // Java ARGB → NativeImage ABGR
                 int a = (argb >>> 24) & 0xFF;
                 int r = (argb >> 16)  & 0xFF;
                 int g = (argb >> 8)   & 0xFF;
-                int b = argb          & 0xFF;
-                int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                native_.setPixelRGBA(px, py, abgr);
+                int b =  argb         & 0xFF;
+                native_.setPixelRGBA(px, py, (a << 24) | (b << 16) | (g << 8) | r);
             }
         }
 
