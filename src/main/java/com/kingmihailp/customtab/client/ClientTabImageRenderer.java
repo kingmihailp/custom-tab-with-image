@@ -35,6 +35,29 @@ public final class ClientTabImageRenderer {
         registered = false;
     }
 
+    /**
+     * Returns true when the image is enabled and successfully loaded.
+     * Used by the mixin to decide whether to shift the tab down.
+     */
+    public static boolean isImageReady() {
+        if (!TabClientConfig.IMAGE_ENABLED.get()) return false;
+        String path = TabClientConfig.IMAGE_PATH.get();
+        if (!path.equals(loadedPath) || (texture == null && !loadFailed)) {
+            loadTexture(path);
+        }
+        return texture != null && !loadFailed;
+    }
+
+    /**
+     * Amount (in pixels) to shift the tab list down so the image sits above it.
+     * = image top offset + image height + 4 px gap.
+     */
+    public static int getTabYShift() {
+        return TabClientConfig.IMAGE_Y_OFFSET.get()
+                + TabClientConfig.IMAGE_DISPLAY_HEIGHT.get()
+                + 4;
+    }
+
     public static void render(GuiGraphics gui, int screenWidth) {
         if (!TabClientConfig.IMAGE_ENABLED.get()) return;
 
