@@ -2,14 +2,16 @@ package com.kingmihailp.customtab.config;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.util.List;
+
 public class TabConfig {
 
     public static final ModConfigSpec SPEC;
     public static final ModConfigSpec.BooleanValue ENABLED;
 
-    // Header / footer text
-    public static final ModConfigSpec.ConfigValue<String> HEADER_TEXT;
-    public static final ModConfigSpec.ConfigValue<String> FOOTER_TEXT;
+    // Header / footer — each entry is one line; joined with \n when sent
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> HEADER_LINES;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> FOOTER_LINES;
 
     // Image settings
     public static final ModConfigSpec.BooleanValue IMAGE_ENABLED;
@@ -34,28 +36,49 @@ public class TabConfig {
         builder.pop();
 
         builder.push("header");
-        HEADER_TEXT = builder
+        HEADER_LINES = builder
                 .comment(
-                        "Tab header text. Supports:",
-                        "  • Legacy color codes: &a, &b, &c … &r, &l, &o, &n, &m, &k",
-                        "  • Hex colors:         &#RRGGBB  (e.g. &#FF5500)",
-                        "  • Newlines:           \\n",
-                        "  • Placeholders:       {online}, {max_players}, {server_name}, {time}",
-                        "Leave empty to disable the header."
+                        "Tab header lines. Each list entry is one line.",
+                        "Formatting codes:  &a &b &c … &r &l &o &n &m &k",
+                        "Hex colors:        &#RRGGBB  (e.g. &#FF5500)",
+                        "Global placeholders:",
+                        "  {online}       — players online",
+                        "  {max_players}  — server player limit",
+                        "  {server_name}  — server name",
+                        "  {time}         — HH:mm:ss",
+                        "  {date}         — yyyy-MM-dd",
+                        "  {tps}          — server TPS",
+                        "  {cpu}          — JVM CPU load (e.g. 42.3%)",
+                        "  {ram_used}     — used heap MB",
+                        "  {ram_max}      — max heap MB",
+                        "Per-player placeholders (unique per recipient):",
+                        "  {player}       — player's in-game name",
+                        "  {ping}         — player's ping in ms",
+                        "Leave the list empty ([]) to disable the header."
                 )
-                .define("text", "&lWelcome to &#FF5500{server_name}&r\\n&7Players online: &a{online}&7/&c{max_players}");
+                .defineList("lines",
+                        List.of(
+                                "&lWelcome to &#FF5500{server_name}&r",
+                                "&7Players: &a{online}&7/&c{max_players} &8| &7TPS: &a{tps} &8| &7{time}"
+                        ),
+                        o -> o instanceof String);
         IMAGE_ABOVE_HEADER = builder
                 .comment("If true, the image is placed ABOVE the header text; otherwise BELOW it.")
                 .define("image_above_header", true);
         builder.pop();
 
         builder.push("footer");
-        FOOTER_TEXT = builder
+        FOOTER_LINES = builder
                 .comment(
-                        "Tab footer text. Same formatting rules as the header.",
-                        "Leave empty to disable the footer."
+                        "Tab footer lines. Same placeholders and formatting as the header.",
+                        "Leave the list empty ([]) to disable the footer."
                 )
-                .define("text", "&7Server time: &e{time}");
+                .defineList("lines",
+                        List.of(
+                                "&7Hello, &e{player}&7! Your ping: &a{ping} ms",
+                                "&7CPU: &b{cpu} &8| &7RAM: &b{ram_used}&7/&b{ram_max} &7MB"
+                        ),
+                        o -> o instanceof String);
         builder.pop();
 
         builder.push("image");
@@ -78,5 +101,15 @@ public class TabConfig {
         builder.pop();
 
         SPEC = builder.build();
+    }
+
+    /** Joins header lines with newlines, returning empty string if the list is empty. */
+    public static String getHeaderText() {
+        return String.join("\n", HEADER_LINES.get());
+    }
+
+    /** Joins footer lines with newlines, returning empty string if the list is empty. */
+    public static String getFooterText() {
+        return String.join("\n", FOOTER_LINES.get());
     }
 }

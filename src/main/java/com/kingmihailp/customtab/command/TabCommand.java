@@ -5,6 +5,7 @@ import com.kingmihailp.customtab.config.TabConfig;
 import com.kingmihailp.customtab.handler.TabListHandler;
 import com.kingmihailp.customtab.util.ColorUtil;
 import com.kingmihailp.customtab.util.ImageConverter;
+import com.kingmihailp.customtab.util.PlaceholderUtil;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -12,24 +13,28 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * /customtab — admin command tree (requires operator level 2).
  *
  * Sub-commands:
- *   /customtab reload              — hot-reload config from disk
- *   /customtab enable              — enable the custom tab
- *   /customtab disable             — disable the custom tab
- *   /customtab header <text>       — set header text (saved to config)
- *   /customtab footer <text>       — set footer text (saved to config)
- *   /customtab image set <path>    — point to an image file on the server
- *   /customtab image enable        — enable image display
- *   /customtab image disable       — disable image display
- *   /customtab image resize <w> <h>— set image render dimensions
- *   /customtab image info          — show current image settings
- *   /customtab preview             — send the current header/footer to the caller only
+ *   /customtab reload
+ *   /customtab enable / disable
+ *   /customtab header set <text>       — replace all lines with one line
+ *   /customtab header add <text>       — append a new line
+ *   /customtab header clear            — remove all lines
+ *   /customtab header list             — show current lines
+ *   /customtab footer set <text>
+ *   /customtab footer add <text>
+ *   /customtab footer clear
+ *   /customtab footer list
+ *   /customtab image set/enable/disable/resize/info
+ *   /customtab preview
  */
 public final class TabCommand {
 
@@ -42,11 +47,9 @@ public final class TabCommand {
             Commands.literal("customtab")
                 .requires(src -> src.hasPermission(2))
 
-                // --- reload ---
                 .then(Commands.literal("reload")
                     .executes(ctx -> reload(ctx.getSource())))
 
-                // --- enable / disable ---
                 .then(Commands.literal("enable")
                     .executes(ctx -> setEnabled(ctx.getSource(), true)))
                 .then(Commands.literal("disable")
@@ -54,15 +57,33 @@ public final class TabCommand {
 
                 // --- header ---
                 .then(Commands.literal("header")
-                    .then(Commands.argument("text", StringArgumentType.greedyString())
-                        .executes(ctx -> setHeader(ctx.getSource(),
-                                StringArgumentType.getString(ctx, "text")))))
+                    .then(Commands.literal("set")
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                            .executes(ctx -> headerSet(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "text")))))
+                    .then(Commands.literal("add")
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                            .executes(ctx -> headerAdd(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "text")))))
+                    .then(Commands.literal("clear")
+                        .executes(ctx -> headerClear(ctx.getSource())))
+                    .then(Commands.literal("list")
+                        .executes(ctx -> headerList(ctx.getSource()))))
 
                 // --- footer ---
                 .then(Commands.literal("footer")
-                    .then(Commands.argument("text", StringArgumentType.greedyString())
-                        .executes(ctx -> setFooter(ctx.getSource(),
-                                StringArgumentType.getString(ctx, "text")))))
+                    .then(Commands.literal("set")
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                            .executes(ctx -> footerSet(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "text")))))
+                    .then(Commands.literal("add")
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                            .executes(ctx -> footerAdd(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "text")))))
+                    .then(Commands.literal("clear")
+                        .executes(ctx -> footerClear(ctx.getSource())))
+                    .then(Commands.literal("list")
+                        .executes(ctx -> footerList(ctx.getSource()))))
 
                 // --- image ---
                 .then(Commands.literal("image")
@@ -90,10 +111,10 @@ public final class TabCommand {
     }
 
     // ------------------------------------------------------------------
+    // General
+    // ------------------------------------------------------------------
 
     private static int reload(CommandSourceStack src) {
-        // NeoForge reloads server configs from disk automatically; we just
-        // invalidate our image cache so the new path/dimensions take effect.
         if (handlerRef != null) handlerRef.invalidateImageCache();
         src.sendSuccess(() -> Component.literal("§aCustomTab config reloaded."), true);
         return 1;
@@ -107,32 +128,104 @@ public final class TabCommand {
         return 1;
     }
 
-    private static int setHeader(CommandSourceStack src, String text) {
-        TabConfig.HEADER_TEXT.set(text);
+    // ------------------------------------------------------------------
+    // Header
+    // ------------------------------------------------------------------
+
+    private static int headerSet(CommandSourceStack src, String text) {
+        TabConfig.HEADER_LINES.set(List.of(text));
         TabConfig.SPEC.save();
-        src.sendSuccess(() -> Component.literal("§aHeader updated. Preview: ")
-                .append(ColorUtil.parse(text)), true);
+        src.sendSuccess(() -> Component.literal("§aHeader set to: ").append(ColorUtil.parse(text)), true);
         return 1;
     }
 
-    private static int setFooter(CommandSourceStack src, String text) {
-        TabConfig.FOOTER_TEXT.set(text);
+    private static int headerAdd(CommandSourceStack src, String text) {
+        List<String> lines = new ArrayList<>(TabConfig.HEADER_LINES.get());
+        lines.add(text);
+        TabConfig.HEADER_LINES.set(lines);
         TabConfig.SPEC.save();
-        src.sendSuccess(() -> Component.literal("§aFooter updated. Preview: ")
-                .append(ColorUtil.parse(text)), true);
+        src.sendSuccess(() -> Component.literal(
+                "§aAdded header line " + lines.size() + ": ").append(ColorUtil.parse(text)), true);
         return 1;
     }
+
+    private static int headerClear(CommandSourceStack src) {
+        TabConfig.HEADER_LINES.set(List.of());
+        TabConfig.SPEC.save();
+        src.sendSuccess(() -> Component.literal("§aHeader cleared."), true);
+        return 1;
+    }
+
+    private static int headerList(CommandSourceStack src) {
+        List<? extends String> lines = TabConfig.HEADER_LINES.get();
+        if (lines.isEmpty()) {
+            src.sendSuccess(() -> Component.literal("§7Header is empty."), false);
+            return 1;
+        }
+        StringBuilder sb = new StringBuilder("§6Header lines:\n");
+        for (int i = 0; i < lines.size(); i++) {
+            sb.append("§7  [").append(i + 1).append("] §f").append(lines.get(i)).append('\n');
+        }
+        String msg = sb.toString().stripTrailing();
+        src.sendSuccess(() -> Component.literal(msg), false);
+        return 1;
+    }
+
+    // ------------------------------------------------------------------
+    // Footer
+    // ------------------------------------------------------------------
+
+    private static int footerSet(CommandSourceStack src, String text) {
+        TabConfig.FOOTER_LINES.set(List.of(text));
+        TabConfig.SPEC.save();
+        src.sendSuccess(() -> Component.literal("§aFooter set to: ").append(ColorUtil.parse(text)), true);
+        return 1;
+    }
+
+    private static int footerAdd(CommandSourceStack src, String text) {
+        List<String> lines = new ArrayList<>(TabConfig.FOOTER_LINES.get());
+        lines.add(text);
+        TabConfig.FOOTER_LINES.set(lines);
+        TabConfig.SPEC.save();
+        src.sendSuccess(() -> Component.literal(
+                "§aAdded footer line " + lines.size() + ": ").append(ColorUtil.parse(text)), true);
+        return 1;
+    }
+
+    private static int footerClear(CommandSourceStack src) {
+        TabConfig.FOOTER_LINES.set(List.of());
+        TabConfig.SPEC.save();
+        src.sendSuccess(() -> Component.literal("§aFooter cleared."), true);
+        return 1;
+    }
+
+    private static int footerList(CommandSourceStack src) {
+        List<? extends String> lines = TabConfig.FOOTER_LINES.get();
+        if (lines.isEmpty()) {
+            src.sendSuccess(() -> Component.literal("§7Footer is empty."), false);
+            return 1;
+        }
+        StringBuilder sb = new StringBuilder("§6Footer lines:\n");
+        for (int i = 0; i < lines.size(); i++) {
+            sb.append("§7  [").append(i + 1).append("] §f").append(lines.get(i)).append('\n');
+        }
+        String msg = sb.toString().stripTrailing();
+        src.sendSuccess(() -> Component.literal(msg), false);
+        return 1;
+    }
+
+    // ------------------------------------------------------------------
+    // Image
+    // ------------------------------------------------------------------
 
     private static int setImagePath(CommandSourceStack src, String path) {
-        // Validate that the file exists
         File file = new File(path);
         if (!file.isAbsolute()) {
             file = new File(src.getServer().getServerDirectory().toFile(), path);
         }
         if (!file.exists()) {
             final File finalFile = file;
-            src.sendFailure(Component.literal(
-                    "§cFile not found: " + finalFile.getAbsolutePath()));
+            src.sendFailure(Component.literal("§cFile not found: " + finalFile.getAbsolutePath()));
             return 0;
         }
         TabConfig.IMAGE_PATH.set(path);
@@ -173,32 +266,29 @@ public final class TabCommand {
         return 1;
     }
 
+    // ------------------------------------------------------------------
+    // Preview
+    // ------------------------------------------------------------------
+
     private static int preview(CommandSourceStack src) {
-        if (!(src.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+        if (!(src.getEntity() instanceof ServerPlayer player)) {
             src.sendFailure(Component.literal("§cThis command can only be run by a player."));
             return 0;
         }
         MinecraftServer server = src.getServer();
-        Component header = buildHeaderForServer(server);
-        Component footer = buildFooterForServer(server);
+        String headerRaw = TabConfig.getHeaderText();
+        String footerRaw = TabConfig.getFooterText();
+
+        Component header = headerRaw.isBlank() ? Component.empty()
+                : ColorUtil.parse(PlaceholderUtil.apply(headerRaw, server, player, 20.0f));
+        Component footer = footerRaw.isBlank() ? Component.empty()
+                : ColorUtil.parse(PlaceholderUtil.apply(footerRaw, server, player, 20.0f));
+
         player.connection.send(
                 new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
-        src.sendSuccess(() -> Component.literal("§aTab preview sent (text only, image requires a full tick)."), false);
+        src.sendSuccess(() -> Component.literal(
+                "§aTab preview sent (text only; image requires a full tick)."), false);
         return 1;
-    }
-
-    private static Component buildHeaderForServer(MinecraftServer server) {
-        String raw = TabConfig.HEADER_TEXT.get();
-        if (raw == null || raw.isBlank()) return Component.empty();
-        return ColorUtil.parse(
-                com.kingmihailp.customtab.util.PlaceholderUtil.apply(raw, server));
-    }
-
-    private static Component buildFooterForServer(MinecraftServer server) {
-        String raw = TabConfig.FOOTER_TEXT.get();
-        if (raw == null || raw.isBlank()) return Component.empty();
-        return ColorUtil.parse(
-                com.kingmihailp.customtab.util.PlaceholderUtil.apply(raw, server));
     }
 
     /** Called from the handler to register itself so commands can invalidate its cache. */

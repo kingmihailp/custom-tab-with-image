@@ -22,11 +22,18 @@ public class TabListHandler {
     private MinecraftServer server;
     private int tickCounter = 0;
 
+    // TPS tracking — ring buffer of the last 20 tick durations (nanoseconds)
+    private static final int TPS_SAMPLES = 20;
+    private final long[] tickNanos = new long[TPS_SAMPLES];
+    private int tpsIdx = 0;
+    private long lastTickNano = System.nanoTime();
+    private float currentTps = 20.0f;
+
     // Cached image component — rebuilt only when the image path/dimensions change
-    private String  cachedImagePath  = null;
-    private int     cachedImageW     = -1;
-    private int     cachedImageH     = -1;
-    private Component cachedImage    = null;
+    private String    cachedImagePath = null;
+    private int       cachedImageW    = -1;
+    private int       cachedImageH    = -1;
+    private Component cachedImage     = null;
 
     @SubscribeEvent
     public void onServerStarted(ServerStartedEvent event) {
@@ -41,19 +48,35 @@ public class TabListHandler {
 
     @SubscribeEvent
     public void onServerTick(ServerTickEvent.Post event) {
+        // --- TPS measurement ---
+        long now = System.nanoTime();
+        tickNanos[tpsIdx % TPS_SAMPLES] = now - lastTickNano;
+        lastTickNano = now;
+        tpsIdx++;
+
+        if (tpsIdx >= TPS_SAMPLES) {
+            long sum = 0;
+            for (long t : tickNanos) sum += t;
+            long avgNs = sum / TPS_SAMPLES;
+            currentTps = avgNs > 0
+                    ? Math.min(20.0f, (float) (1_000_000_000.0 / avgNs))
+                    : 20.0f;
+        }
+
+        // --- Tab update ---
         if (server == null) return;
         if (!TabConfig.ENABLED.get()) return;
 
         tickCounter++;
-        int interval = TabConfig.UPDATE_INTERVAL.get();
-        if (tickCounter < interval) return;
+        if (tickCounter < TabConfig.UPDATE_INTERVAL.get()) return;
         tickCounter = 0;
 
-        Component header = buildHeader();
-        Component footer = buildFooter();
-
+        Component image = getOrBuildImage();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            player.connection.send(new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
+            Component header = buildHeader(player, image);
+            Component footer = buildFooter(player);
+            player.connection.send(
+                    new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
         }
     }
 
@@ -64,13 +87,13 @@ public class TabListHandler {
         if (!TabConfig.ENABLED.get()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        Component header = buildHeader();
-        Component footer = buildFooter();
-        player.connection.send(new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
+        Component image  = getOrBuildImage();
+        Component header = buildHeader(player, image);
+        Component footer = buildFooter(player);
+        player.connection.send(
+                new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));
     }
 
-    // ------------------------------------------------------------------
-    // Internal helpers
     // ------------------------------------------------------------------
 
     /** Force the image cache to be rebuilt on next tick (called after /customtab reload). */
@@ -78,11 +101,10 @@ public class TabListHandler {
         cachedImagePath = null;
     }
 
-    private Component buildHeader() {
+    private Component buildHeader(ServerPlayer player, Component image) {
         MutableComponent header = Component.empty();
 
-        Component image = getOrBuildImage();
-        String headerRaw = TabConfig.HEADER_TEXT.get();
+        String headerRaw = TabConfig.getHeaderText();
 
         if (image != null && TabConfig.IMAGE_ABOVE_HEADER.get()) {
             header.append(image);
@@ -90,7 +112,7 @@ public class TabListHandler {
         }
 
         if (!headerRaw.isBlank()) {
-            String resolved = PlaceholderUtil.apply(headerRaw, server);
+            String resolved = PlaceholderUtil.apply(headerRaw, server, player, currentTps);
             header.append(ColorUtil.parse(resolved));
         }
 
@@ -102,10 +124,10 @@ public class TabListHandler {
         return header;
     }
 
-    private Component buildFooter() {
-        String raw = TabConfig.FOOTER_TEXT.get();
+    private Component buildFooter(ServerPlayer player) {
+        String raw = TabConfig.getFooterText();
         if (raw == null || raw.isBlank()) return Component.empty();
-        String resolved = PlaceholderUtil.apply(raw, server);
+        String resolved = PlaceholderUtil.apply(raw, server, player, currentTps);
         return ColorUtil.parse(resolved);
     }
 
@@ -116,7 +138,6 @@ public class TabListHandler {
         int    w    = TabConfig.IMAGE_WIDTH.get();
         int    h    = TabConfig.IMAGE_HEIGHT.get();
 
-        // Return cached version if nothing changed
         if (path.equals(cachedImagePath) && w == cachedImageW && h == cachedImageH) {
             return cachedImage;
         }
