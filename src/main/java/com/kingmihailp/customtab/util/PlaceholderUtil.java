@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerPlayer;
 import javax.annotation.Nullable;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
+import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -73,10 +74,16 @@ public final class PlaceholderUtil {
     // ------------------------------------------------------------------
 
     private static String getCpuLoad() {
-        OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
-        if (os instanceof com.sun.management.OperatingSystemMXBean sunOs) {
-            double load = sunOs.getCpuLoad();
-            if (load >= 0) return String.format("%.1f%%", load * 100.0);
+        try {
+            OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
+            // getCpuLoad() lives in com.sun.management.OperatingSystemMXBean — use
+            // reflection to avoid a hard class reference that breaks NeoForge's classloader.
+            Method m = os.getClass().getMethod("getCpuLoad");
+            Object result = m.invoke(os);
+            if (result instanceof Number n && n.doubleValue() >= 0) {
+                return String.format("%.1f%%", n.doubleValue() * 100.0);
+            }
+        } catch (Throwable ignored) {
         }
         return "N/A";
     }

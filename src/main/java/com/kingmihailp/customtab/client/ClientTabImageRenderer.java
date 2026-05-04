@@ -36,16 +36,14 @@ public final class ClientTabImageRenderer {
     }
 
     /**
-     * Returns true when the image is enabled and successfully loaded.
-     * Used by the mixin to decide whether to shift the tab down.
+     * Returns true when the image is enabled and the texture is already loaded.
+     * Intentionally does NOT trigger loading — render() is responsible for that.
+     * Called from the mixin HEAD injection; must be side-effect-free.
      */
     public static boolean isImageReady() {
         if (!TabClientConfig.IMAGE_ENABLED.get()) return false;
         String path = TabClientConfig.IMAGE_PATH.get();
-        if (!path.equals(loadedPath) || (texture == null && !loadFailed)) {
-            loadTexture(path);
-        }
-        return texture != null && !loadFailed;
+        return texture != null && !loadFailed && path.equals(loadedPath);
     }
 
     /**
