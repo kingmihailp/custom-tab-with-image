@@ -41,6 +41,12 @@ public class TabConfig {
                         "Tab header lines. Each list entry is one line.",
                         "Formatting codes:  &a &b &c … &r &l &o &n &m &k",
                         "Hex colors:        &#RRGGBB  (e.g. &#FF5500)",
+                        "Font tags (case-insensitive, affect all following text):",
+                        "  [font:default]    — standard Minecraft font (reset)",
+                        "  [font:uniform]    — uniform-width font",
+                        "  [font:alt]        — Standard Galactic Alphabet (enchanting table)",
+                        "  [font:illageralt] — Illager rune font (woodland mansion)",
+                        "  [font:ns:path]    — any resource-pack font by full resource location",
                         "Global placeholders:",
                         "  {online}       — players online",
                         "  {max_players}  — server player limit",
@@ -70,7 +76,7 @@ public class TabConfig {
         builder.push("footer");
         FOOTER_LINES = builder
                 .comment(
-                        "Tab footer lines. Same placeholders and formatting as the header.",
+                        "Tab footer lines. Same placeholders, formatting, and [font:NAME] tags as the header.",
                         "Leave the list empty ([]) to disable the footer."
                 )
                 .defineList("lines",

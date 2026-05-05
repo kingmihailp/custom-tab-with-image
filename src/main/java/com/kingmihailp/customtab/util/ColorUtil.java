@@ -4,41 +4,66 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.ChatFormatting;
+import net.minecraft.resources.ResourceLocation;
 
 import java.awt.Color;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Converts strings with &-codes and &#RRGGBB hex codes into Adventure Components.
+ * Converts strings with &-codes, &#RRGGBB hex codes, and [font:NAME] tags
+ * into styled Components.
  *
- * Supported syntax:
- *   &#RRGGBB  — 24-bit hex colour
- *   &0-9a-f  — legacy colour codes
- *   &k l m n o r — legacy formatting codes
+ * Colour / formatting:
+ *   &#RRGGBB        — 24-bit hex colour
+ *   &0-9 a-f        — legacy colour codes
+ *   &k l m n o r   — legacy formatting codes (obfuscated / bold / strike / under / italic / reset)
+ *
+ * Font tags (case-insensitive, apply to all following text until next [font:…]):
+ *   [font:default]   — standard Minecraft font  (reset)
+ *   [font:uniform]   — uniform-width font        (cleaner, monospaced feel)
+ *   [font:alt]       — Standard Galactic Alphabet (enchantment-table symbols)
+ *   [font:illageralt] — Illager rune font         (woodland mansion symbols)
+ *   [font:namespace:path] — any resource-pack font by full resource location
+ *
+ * Other:
  *   \n — newline
  */
 public final class ColorUtil {
 
-    private static final Pattern HEX_PATTERN   = Pattern.compile("&#([0-9A-Fa-f]{6})");
-    private static final Pattern AMP_PATTERN   = Pattern.compile("&([0-9a-fk-orA-FK-OR])");
+    private static final ResourceLocation FONT_DEFAULT    = ResourceLocation.fromNamespaceAndPath("minecraft", "default");
+    private static final ResourceLocation FONT_UNIFORM    = ResourceLocation.fromNamespaceAndPath("minecraft", "uniform");
+    private static final ResourceLocation FONT_ALT        = ResourceLocation.fromNamespaceAndPath("minecraft", "alt");
+    private static final ResourceLocation FONT_ILLAGERALT = ResourceLocation.fromNamespaceAndPath("minecraft", "illageralt");
+
+    private static final String FONT_TAG_OPEN = "[font:";
 
     private ColorUtil() {}
 
     /** Parse a raw config string into a fully styled Component. */
     public static Component parse(String raw) {
-        // Replace literal \n with real newlines first
         String text = raw.replace("\\n", "\n");
 
         MutableComponent root = Component.empty();
         Style currentStyle = Style.EMPTY;
 
-        // We iterate token by token: either a colour/format code or plain text.
         int i = 0;
         StringBuilder plain = new StringBuilder();
 
         while (i < text.length()) {
-            // Check for hex colour &#RRGGBB
+
+            // ── [font:NAME] ────────────────────────────────────────────────
+            if (text.regionMatches(true, i, FONT_TAG_OPEN, 0, FONT_TAG_OPEN.length())) {
+                int end = text.indexOf(']', i + FONT_TAG_OPEN.length());
+                if (end > i + FONT_TAG_OPEN.length()) {
+                    String fontName = text.substring(i + FONT_TAG_OPEN.length(), end);
+                    flushPlain(root, plain, currentStyle);
+                    plain = new StringBuilder();
+                    currentStyle = currentStyle.withFont(resolveFont(fontName));
+                    i = end + 1;
+                    continue;
+                }
+            }
+
+            // ── &#RRGGBB ───────────────────────────────────────────────────
             if (i + 7 < text.length() && text.charAt(i) == '&' && text.charAt(i + 1) == '#') {
                 String hex = text.substring(i + 2, i + 8);
                 if (hex.matches("[0-9A-Fa-f]{6}")) {
@@ -52,7 +77,7 @@ public final class ColorUtil {
                 }
             }
 
-            // Check for legacy & code
+            // ── &code ──────────────────────────────────────────────────────
             if (i + 1 < text.length() && text.charAt(i) == '&') {
                 char code = text.charAt(i + 1);
                 ChatFormatting fmt = ChatFormatting.getByCode(code);
@@ -76,6 +101,36 @@ public final class ColorUtil {
         }
         flushPlain(root, plain, currentStyle);
         return root;
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Maps a font name string to a ResourceLocation.
+     * Accepts short aliases or a full "namespace:path" resource location.
+     */
+    private static ResourceLocation resolveFont(String name) {
+        return switch (name.toLowerCase()) {
+            case "default"              -> FONT_DEFAULT;
+            case "uniform"              -> FONT_UNIFORM;
+            case "alt", "galactic",
+                 "enchanting",
+                 "enchantment"          -> FONT_ALT;
+            case "illageralt", "illager",
+                 "rune", "runes"        -> FONT_ILLAGERALT;
+            default -> {
+                // Allow fully-qualified "namespace:path" for resource-pack fonts
+                if (name.contains(":")) {
+                    try {
+                        yield ResourceLocation.parse(name);
+                    } catch (Exception e) {
+                        yield FONT_DEFAULT;
+                    }
+                }
+                // Fall back: treat as a minecraft sub-font
+                yield ResourceLocation.fromNamespaceAndPath("minecraft", name.toLowerCase());
+            }
+        };
     }
 
     private static void flushPlain(MutableComponent root, StringBuilder plain, Style style) {
