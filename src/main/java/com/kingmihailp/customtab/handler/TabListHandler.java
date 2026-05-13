@@ -2,7 +2,6 @@ package com.kingmihailp.customtab.handler;
 
 import com.kingmihailp.customtab.CustomTabMod;
 import com.kingmihailp.customtab.config.TabConfig;
-import com.kingmihailp.customtab.util.ColorUtil;
 import com.kingmihailp.customtab.util.ImageConverter;
 import com.kingmihailp.customtab.util.PlaceholderUtil;
 import net.minecraft.network.chat.Component;
@@ -112,8 +111,7 @@ public class TabListHandler {
         }
 
         if (!headerRaw.isBlank()) {
-            String resolved = PlaceholderUtil.apply(headerRaw, server, player, currentTps);
-            header.append(ColorUtil.parse(resolved));
+            header.append(PlaceholderUtil.buildComponent(headerRaw, server, player, currentTps));
         }
 
         if (image != null && !TabConfig.IMAGE_ABOVE_HEADER.get()) {
@@ -127,8 +125,7 @@ public class TabListHandler {
     private Component buildFooter(ServerPlayer player) {
         String raw = TabConfig.getFooterText();
         if (raw == null || raw.isBlank()) return Component.empty();
-        String resolved = PlaceholderUtil.apply(raw, server, player, currentTps);
-        return ColorUtil.parse(resolved);
+        return PlaceholderUtil.buildComponent(raw, server, player, currentTps);
     }
 
     private Component getOrBuildImage() {

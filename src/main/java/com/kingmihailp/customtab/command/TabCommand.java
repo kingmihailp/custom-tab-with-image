@@ -280,9 +280,9 @@ public final class TabCommand {
         String footerRaw = TabConfig.getFooterText();
 
         Component header = headerRaw.isBlank() ? Component.empty()
-                : ColorUtil.parse(PlaceholderUtil.apply(headerRaw, server, player, 20.0f));
+                : PlaceholderUtil.buildComponent(headerRaw, server, player, 20.0f);
         Component footer = footerRaw.isBlank() ? Component.empty()
-                : ColorUtil.parse(PlaceholderUtil.apply(footerRaw, server, player, 20.0f));
+                : PlaceholderUtil.buildComponent(footerRaw, server, player, 20.0f);
 
         player.connection.send(
                 new net.minecraft.network.protocol.game.ClientboundTabListPacket(header, footer));

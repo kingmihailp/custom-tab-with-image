@@ -58,7 +58,8 @@ public class TabConfig {
                         "  {ram_used}     — used heap MB",
                         "  {ram_max}      — max heap MB",
                         "Per-player placeholders (unique per recipient):",
-                        "  {player}       — player's in-game name",
+                        "  {player}       — raw username (no prefix)",
+                        "  {display_name} — full display name with LuckPerms/Essentials prefix (colours preserved)",
                         "  {ping}         — player's ping in ms",
                         "Leave the list empty ([]) to disable the header."
                 )
